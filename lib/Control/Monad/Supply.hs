@@ -55,6 +55,7 @@ supplyN n = replicateM n supply
 -----------------------------------------------------------------------------
 
 newtype SupplyT s m a = SupplyT { runSupplyT :: s -> m (a, s) }
+  deriving (Functor)
     
 evalSupplyT :: Monad m => SupplyT s m a -> s -> m a
 evalSupplyT st s = do
@@ -71,25 +72,20 @@ mapSupplyT f st = SupplyT $ f . runSupplyT st
 
 -----------------------------------------------------------------------------
 
-instance Monad m => Functor (SupplyT s m) where
-    fmap f m = SupplyT $ \s -> do
-                               ~(x, s') <- runSupplyT m s
-                               return (f x,s')
 instance Monad m => Applicative (SupplyT s m) where
-    pure = return
+    pure a = SupplyT $ pure . (,) a
     (<*>) = ap
 
 instance Monad m => Monad (SupplyT s m) where
-    return a  = SupplyT $ \s -> return (a, s) 
     m >>= f   = SupplyT $ \s -> do
                                 ~(a,s') <- runSupplyT m s
                                 runSupplyT (f a) s'
+
+instance MonadFail m => MonadFail (SupplyT s m) where
     fail str  = SupplyT $ \_ -> fail str
  
 instance MonadTrans (SupplyT s) where
-    lift m = SupplyT $ \s -> do
-                             a <- m
-                             return (a,s)
+    lift m = SupplyT $ \s -> flip (,) s <$> m
 
 instance Monad m => MonadSupply s (SupplyT s m) where
     supply = SupplyT $ \s -> return $ nextSupply s
